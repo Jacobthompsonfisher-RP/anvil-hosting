@@ -11,21 +11,25 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Install SSH key for Anvil git remote
+        env:
+          ANVIL_SSH_KEY_B64: ${{ secrets.ANVIL_SSH_KEY_B64 }}
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s' "$ANVIL_SSH_KEY_B64" | base64 -d > ~/.ssh/anvil_id
+          chmod 600 ~/.ssh/anvil_id
+
       - name: Check for new commits in the Anvil app repo
         id: check
         env:
-          APP_REPO: ${{ vars.ANVIL_APP_REPO }}
+          APP_GIT_URL: ${{ vars.ANVIL_APP_GIT_URL }}
           APP_BRANCH: ${{ vars.ANVIL_APP_BRANCH }}
-          APP_REPO_TOKEN: ${{ secrets.APP_REPO_TOKEN }}
+          GIT_SSH_COMMAND: "ssh -i /home/runner/.ssh/anvil_id -o StrictHostKeyChecking=accept-new"
         run: |
-          branch="${APP_BRANCH:-main}"
-          latest=$(curl -sf \
-            -H "Authorization: Bearer $APP_REPO_TOKEN" \
-            -H "Accept: application/vnd.github+json" \
-            "https://api.github.com/repos/$APP_REPO/commits/$branch" \
-            | python3 -c "import json,sys; print(json.load(sys.stdin)['sha'])")
+          ref="${APP_BRANCH:-HEAD}"
+          latest=$(git ls-remote "$APP_GIT_URL" "$ref" | head -n1 | cut -f1)
           if [ -z "$latest" ]; then
-            echo "Could not resolve latest commit for $APP_REPO@$branch" >&2
+            echo "Could not resolve latest commit for $APP_GIT_URL@$ref" >&2
             exit 1
           fi
           prev=$(cat state/last-app-sha.txt 2>/dev/null || true)

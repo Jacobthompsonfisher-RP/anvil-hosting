@@ -1,22 +1,28 @@
 #!/bin/bash
 set -euo pipefail
 
-: "${ANVIL_APP_REPO:?Set ANVIL_APP_REPO to your Anvil app's GitHub repo as owner/name}"
-: "${ANVIL_APP_BRANCH:=main}"
-: "${GITHUB_TOKEN:?Set GITHUB_TOKEN to a read-only token for the private app repo}"
+: "${ANVIL_APP_GIT_URL:?Set ANVIL_APP_GIT_URL to your Anvil app's git remote (from Clone with Git)}"
+: "${ANVIL_SSH_KEY_B64:?Set ANVIL_SSH_KEY_B64 to the base64-encoded read-only SSH private key}"
+: "${ANVIL_APP_BRANCH:=}"
 : "${PORT:=3030}"
 
 APP_DIR=/apps/MainApp
 
-echo "Fetching Anvil app source from ${ANVIL_APP_REPO} (branch: ${ANVIL_APP_BRANCH})"
+# Install the SSH key used to read the app from Anvil's private git remote.
+SSH_DIR=/tmp/anvil-ssh
+mkdir -p "$SSH_DIR"
+chmod 700 "$SSH_DIR"
+printf '%s' "$ANVIL_SSH_KEY_B64" | base64 -d > "$SSH_DIR/id"
+chmod 600 "$SSH_DIR/id"
+export GIT_SSH_COMMAND="ssh -i $SSH_DIR/id -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=$SSH_DIR/known_hosts"
+
+echo "Fetching Anvil app source from ${ANVIL_APP_GIT_URL} (branch: ${ANVIL_APP_BRANCH:-<default>})"
 rm -rf "$APP_DIR"
-mkdir -p "$APP_DIR"
-# GitHub tarball API works for private repos with a token, and needs no git in the image.
-TARBALL_URL="https://api.github.com/repos/${ANVIL_APP_REPO}/tarball/${ANVIL_APP_BRANCH}"
-wget -qO- \
-  --header="Authorization: Bearer ${GITHUB_TOKEN}" \
-  --header="Accept: application/vnd.github+json" \
-  "$TARBALL_URL" | tar xz -C "$APP_DIR" --strip-components=1
+if [[ -n "$ANVIL_APP_BRANCH" ]]; then
+  git clone --depth 1 --branch "$ANVIL_APP_BRANCH" "$ANVIL_APP_GIT_URL" "$APP_DIR"
+else
+  git clone --depth 1 "$ANVIL_APP_GIT_URL" "$APP_DIR"
+fi
 
 ORIGIN_ARGS=()
 if [[ -n "${RAILWAY_PUBLIC_DOMAIN:-}" ]]; then

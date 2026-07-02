@@ -1,2 +1,7 @@
 .railway/
 *.log
+
+# Deploy key material — never commit
+anvil_deploy_key
+anvil_deploy_key.pub
+anvil_deploy_key.b64
