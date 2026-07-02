@@ -1,17 +1,22 @@
 #!/bin/bash
 set -euo pipefail
 
-: "${ANVIL_APP_REPO_URL:?Set ANVIL_APP_REPO_URL to your Anvil app's public GitHub repo URL}"
+: "${ANVIL_APP_REPO:?Set ANVIL_APP_REPO to your Anvil app's GitHub repo as owner/name}"
 : "${ANVIL_APP_BRANCH:=main}"
+: "${GITHUB_TOKEN:?Set GITHUB_TOKEN to a read-only token for the private app repo}"
 : "${PORT:=3030}"
 
 APP_DIR=/apps/MainApp
 
-echo "Fetching Anvil app source from ${ANVIL_APP_REPO_URL} (branch: ${ANVIL_APP_BRANCH})"
+echo "Fetching Anvil app source from ${ANVIL_APP_REPO} (branch: ${ANVIL_APP_BRANCH})"
 rm -rf "$APP_DIR"
 mkdir -p "$APP_DIR"
-TARBALL_URL="${ANVIL_APP_REPO_URL%.git}/archive/refs/heads/${ANVIL_APP_BRANCH}.tar.gz"
-wget -qO- "$TARBALL_URL" | tar xz -C "$APP_DIR" --strip-components=1
+# GitHub tarball API works for private repos with a token, and needs no git in the image.
+TARBALL_URL="https://api.github.com/repos/${ANVIL_APP_REPO}/tarball/${ANVIL_APP_BRANCH}"
+wget -qO- \
+  --header="Authorization: Bearer ${GITHUB_TOKEN}" \
+  --header="Accept: application/vnd.github+json" \
+  "$TARBALL_URL" | tar xz -C "$APP_DIR" --strip-components=1
 
 ORIGIN_ARGS=()
 if [[ -n "${RAILWAY_PUBLIC_DOMAIN:-}" ]]; then

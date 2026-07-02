@@ -14,9 +14,16 @@ and server infrastructure update independently:
 
 ## One-time setup
 
-### 1. Connect your Anvil app to GitHub
-In the Anvil editor: **Version History → Save app to GitHub**. Choose **public** (private repos need
-an Anvil Business plan+). Note the resulting repo URL, e.g. `https://github.com/<you>/<app-name>`.
+### 1. Connect your Anvil app to a *private* GitHub repo
+In the Anvil editor: **Version History → Save app to GitHub**, choose **Private** (requires an Anvil
+Business plan or higher). Note the repo as `owner/name`, e.g. `you/my-anvil-app`.
+
+### 1b. Create a read-only token for the app repo
+GitHub → **Settings → Developer settings → Fine-grained personal access tokens → Generate new**:
+- **Repository access**: Only select repositories → your Anvil app repo.
+- **Permissions**: Repository permissions → **Contents: Read-only**.
+- Copy the token. It's used in two places: the Railway service (`GITHUB_TOKEN`) so the container can
+  fetch the app, and this hosting repo's Actions (`APP_REPO_TOKEN`) so the poller can see new commits.
 
 ### 2. Create the Railway project
 ```
@@ -32,8 +39,9 @@ In the Railway dashboard (or `railway variables --set KEY=VALUE`), set on the se
 
 | Variable | Value |
 |---|---|
-| `ANVIL_APP_REPO_URL` | your app's GitHub repo URL from step 1 |
+| `ANVIL_APP_REPO` | your app repo as `owner/name` from step 1 |
 | `ANVIL_APP_BRANCH` | `main` (or whatever branch Anvil pushes to) |
+| `GITHUB_TOKEN` | the read-only fine-grained token from step 1b |
 | `ANVIL_SECRET_<NAME>` | any app secret your `server_code` reads via `anvil.secrets.get_secret("<NAME>")` |
 
 `PORT` and `RAILWAY_PUBLIC_DOMAIN` are already provided by Railway automatically.
@@ -42,11 +50,12 @@ In the Railway dashboard (or `railway variables --set KEY=VALUE`), set on the se
 Railway dashboard → Project Settings → Tokens → create a **project token**. Then, in this repo on
 GitHub:
 ```
-gh secret set RAILWAY_TOKEN          # paste the token when prompted
+gh secret set RAILWAY_TOKEN          # paste the Railway project token when prompted
+gh secret set APP_REPO_TOKEN         # paste the read-only fine-grained token from step 1b
 gh variable set RAILWAY_PROJECT_ID --body "<project id, from `railway status --json`>"
 gh variable set RAILWAY_SERVICE      --body "<service name>"
 gh variable set RAILWAY_ENVIRONMENT  --body "production"
-gh variable set ANVIL_APP_REPO_URL   --body "https://github.com/<you>/<app-name>"
+gh variable set ANVIL_APP_REPO       --body "<you>/<app-name>"
 gh variable set ANVIL_APP_BRANCH     --body "main"
 ```
 

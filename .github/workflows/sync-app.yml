@@ -14,13 +14,18 @@ jobs:
       - name: Check for new commits in the Anvil app repo
         id: check
         env:
-          APP_REPO_URL: ${{ vars.ANVIL_APP_REPO_URL }}
+          APP_REPO: ${{ vars.ANVIL_APP_REPO }}
           APP_BRANCH: ${{ vars.ANVIL_APP_BRANCH }}
+          APP_REPO_TOKEN: ${{ secrets.APP_REPO_TOKEN }}
         run: |
           branch="${APP_BRANCH:-main}"
-          latest=$(git ls-remote "$APP_REPO_URL" "refs/heads/$branch" | cut -f1)
+          latest=$(curl -sf \
+            -H "Authorization: Bearer $APP_REPO_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/$APP_REPO/commits/$branch" \
+            | python3 -c "import json,sys; print(json.load(sys.stdin)['sha'])")
           if [ -z "$latest" ]; then
-            echo "Could not resolve latest commit for $APP_REPO_URL@$branch" >&2
+            echo "Could not resolve latest commit for $APP_REPO@$branch" >&2
             exit 1
           fi
           prev=$(cat state/last-app-sha.txt 2>/dev/null || true)
