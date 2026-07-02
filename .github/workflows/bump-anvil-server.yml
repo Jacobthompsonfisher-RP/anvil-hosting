@@ -1,0 +1,46 @@
+name: Bump anvil-app-server version
+
+on:
+  schedule:
+    - cron: '17 6 * * *'
+  workflow_dispatch: {}
+
+jobs:
+  bump:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check PyPI for the latest anvil-app-server release
+        id: check
+        run: |
+          latest=$(curl -sf https://pypi.org/pypi/anvil-app-server/json | python3 -c "import json,sys; print(json.load(sys.stdin)['info']['version'])")
+          current=$(grep -oP '(?<=ARG ANVIL_SERVER_VERSION=).*' Dockerfile)
+          echo "latest=$latest" >> "$GITHUB_OUTPUT"
+          if [ "$latest" != "$current" ] && [ "$current" != "latest" ]; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Bump Dockerfile pin and commit
+        if: steps.check.outputs.changed == 'true'
+        run: |
+          sed -i "s/^ARG ANVIL_SERVER_VERSION=.*/ARG ANVIL_SERVER_VERSION=${{ steps.check.outputs.latest }}/" Dockerfile
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add Dockerfile
+          git commit -m "chore: bump anvil-app-server to ${{ steps.check.outputs.latest }}"
+          git push
+
+      - name: Rebuild and deploy on Railway
+        if: steps.check.outputs.changed == 'true'
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+        run: |
+          npm install -g @railway/cli
+          railway up \
+            --project "${{ vars.RAILWAY_PROJECT_ID }}" \
+            --service "${{ vars.RAILWAY_SERVICE }}" \
+            --environment "${{ vars.RAILWAY_ENVIRONMENT }}" \
+            --ci --detach

@@ -1,0 +1,55 @@
+name: Sync Anvil app content
+
+on:
+  schedule:
+    - cron: '*/5 * * * *'
+  workflow_dispatch: {}
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check for new commits in the Anvil app repo
+        id: check
+        env:
+          APP_REPO_URL: ${{ vars.ANVIL_APP_REPO_URL }}
+          APP_BRANCH: ${{ vars.ANVIL_APP_BRANCH }}
+        run: |
+          branch="${APP_BRANCH:-main}"
+          latest=$(git ls-remote "$APP_REPO_URL" "refs/heads/$branch" | cut -f1)
+          if [ -z "$latest" ]; then
+            echo "Could not resolve latest commit for $APP_REPO_URL@$branch" >&2
+            exit 1
+          fi
+          prev=$(cat state/last-app-sha.txt 2>/dev/null || true)
+          echo "latest=$latest" >> "$GITHUB_OUTPUT"
+          if [ "$latest" != "$prev" ]; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Redeploy Railway service
+        if: steps.check.outputs.changed == 'true'
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+        run: |
+          npm install -g @railway/cli
+          railway redeploy \
+            --project "${{ vars.RAILWAY_PROJECT_ID }}" \
+            --service "${{ vars.RAILWAY_SERVICE }}" \
+            --environment "${{ vars.RAILWAY_ENVIRONMENT }}" \
+            --yes
+
+      - name: Record deployed SHA
+        if: steps.check.outputs.changed == 'true'
+        run: |
+          mkdir -p state
+          echo "${{ steps.check.outputs.latest }}" > state/last-app-sha.txt
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add state/last-app-sha.txt
+          git commit -m "chore: sync deployed Anvil app SHA to ${{ steps.check.outputs.latest }}"
+          git push
