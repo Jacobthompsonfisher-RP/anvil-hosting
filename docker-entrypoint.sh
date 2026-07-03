@@ -25,9 +25,39 @@ else
   git clone --depth 1 "$ANVIL_APP_GIT_URL" "$APP_DIR"
 fi
 
+# --- Dependencies -----------------------------------------------------------
+# The app depends on other Anvil apps. Anvil's git server won't serve third-party
+# dependency apps to this key, but the popular ones are public on GitHub. Map each
+# dependency's Anvil app_id to its GitHub repo here; the pinned version tag and
+# package name are read automatically from the main app's anvil.yaml, so bumping a
+# dependency version in the Anvil editor needs no change here. Add a line only when
+# the app gains a brand-new dependency.
+declare -A DEP_REPOS=(
+  [3PIDO5P3H4VPEMPL]="https://github.com/anvil-works/routing.git"
+  [TGQCF3WT6FVL2EM2]="https://github.com/anvilistas/tabulator.git"
+)
+
+DEP_ARGS=()
+YAML="$APP_DIR/anvil.yaml"
+for app_id in "${!DEP_REPOS[@]}"; do
+  repo="${DEP_REPOS[$app_id]}"
+  pkg=$(grep "app_id: $app_id" "$YAML" | grep -oE 'package_name: [A-Za-z0-9_]+' | awk '{print $2}')
+  tag=$(grep -A1 "app_id: $app_id" "$YAML" | grep -oE 'version_tag: [^}]+' | head -1 | awk '{print $2}')
+  pkg="${pkg:-$app_id}"
+  dep_dir="/apps/$pkg"
+  echo "Fetching dependency ${pkg} from ${repo} (tag: ${tag:-<default>})"
+  rm -rf "$dep_dir"
+  if [[ -n "$tag" ]]; then
+    git clone --depth 1 --branch "$tag" "$repo" "$dep_dir"
+  else
+    git clone --depth 1 "$repo" "$dep_dir"
+  fi
+  DEP_ARGS+=(--dep-id "$app_id=$pkg")
+done
+
 # The bundled Postgres refuses to run as root, and Railway mounts the volume as root.
 # Give the unprivileged app user ownership of the app + data dirs, then drop privileges.
-chown -R "$APP_USER":"$APP_USER" "$APP_DIR" /anvil-data
+chown -R "$APP_USER":"$APP_USER" /apps /anvil-data
 
 ORIGIN_ARGS=()
 if [[ -n "${RAILWAY_PUBLIC_DOMAIN:-}" ]]; then
@@ -51,6 +81,7 @@ exec setpriv --reuid="$APP_USER" --regid="$APP_USER" --init-groups \
   --ip 0.0.0.0 \
   --disable-tls \
   --auto-migrate \
+  "${DEP_ARGS[@]}" \
   "${ORIGIN_ARGS[@]}" \
   "${SECRET_ARGS[@]}" \
   "$@"
