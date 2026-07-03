@@ -41,18 +41,22 @@ DEP_ARGS=()
 YAML="$APP_DIR/anvil.yaml"
 for app_id in "${!DEP_REPOS[@]}"; do
   repo="${DEP_REPOS[$app_id]}"
+  # dep_id (dep_xxx) sits on the line above resolution_hints; package_name + version_tag
+  # sit on/after it. The runtime keys --dep-id by dep_id, NOT app_id (falls back to
+  # app_id for the legacy anvil.yaml format that has no dep_id).
+  dep_id=$(grep -B1 "app_id: $app_id" "$YAML" | grep -oE 'dep_id: dep_[a-z0-9]+' | head -1 | awk '{print $2}')
   pkg=$(grep "app_id: $app_id" "$YAML" | grep -oE 'package_name: [A-Za-z0-9_]+' | awk '{print $2}')
   tag=$(grep -A1 "app_id: $app_id" "$YAML" | grep -oE 'version_tag: [^}]+' | head -1 | awk '{print $2}')
   pkg="${pkg:-$app_id}"
   dep_dir="/apps/$pkg"
-  echo "Fetching dependency ${pkg} from ${repo} (tag: ${tag:-<default>})"
+  echo "Fetching dependency ${pkg} (${dep_id:-$app_id}) from ${repo} (tag: ${tag:-<default>})"
   rm -rf "$dep_dir"
   if [[ -n "$tag" ]]; then
     git clone --depth 1 --branch "$tag" "$repo" "$dep_dir"
   else
     git clone --depth 1 "$repo" "$dep_dir"
   fi
-  DEP_ARGS+=(--dep-id "$app_id=$pkg")
+  DEP_ARGS+=(--dep-id "${dep_id:-$app_id}=$pkg")
 done
 
 # Railway restarts containers with SIGKILL, so the bundled Postgres never shuts down
