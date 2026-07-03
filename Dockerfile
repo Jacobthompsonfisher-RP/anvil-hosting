@@ -2,9 +2,9 @@ ARG ANVIL_SERVER_VERSION=latest
 FROM anvilworks/anvil-app-server:${ANVIL_SERVER_VERSION}
 
 USER root
-# git + ssh client are needed to clone the app from Anvil's private git remote at runtime.
-RUN (microdnf install -y git openssh-clients && microdnf clean all) \
-    || (dnf install -y git openssh-clients && dnf clean all)
+# git + ssh client clone the app at runtime; util-linux provides setpriv to drop to the anvil user.
+RUN (microdnf install -y git openssh-clients util-linux && microdnf clean all) \
+    || (dnf install -y git openssh-clients util-linux && dnf clean all)
 COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 # Normalise line endings (strip CR) so the script runs regardless of host checkout settings.
 RUN sed -i 's/\r$//' /usr/local/bin/docker-entrypoint.sh \

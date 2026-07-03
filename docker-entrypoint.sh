@@ -7,6 +7,7 @@ set -euo pipefail
 : "${PORT:=3030}"
 
 APP_DIR=/apps/MainApp
+APP_USER=anvil
 
 # Install the SSH key used to read the app from Anvil's private git remote.
 SSH_DIR=/tmp/anvil-ssh
@@ -24,6 +25,10 @@ else
   git clone --depth 1 "$ANVIL_APP_GIT_URL" "$APP_DIR"
 fi
 
+# The bundled Postgres refuses to run as root, and Railway mounts the volume as root.
+# Give the unprivileged app user ownership of the app + data dirs, then drop privileges.
+chown -R "$APP_USER":"$APP_USER" "$APP_DIR" /anvil-data
+
 ORIGIN_ARGS=()
 if [[ -n "${RAILWAY_PUBLIC_DOMAIN:-}" ]]; then
   ORIGIN_ARGS=(--origin "https://${RAILWAY_PUBLIC_DOMAIN}")
@@ -37,7 +42,9 @@ while IFS='=' read -r name value; do
   SECRET_ARGS+=(--secret "${secret_name}=${value}")
 done < <(env)
 
-exec anvil-app-server \
+export HOME=/anvil-data
+exec setpriv --reuid="$APP_USER" --regid="$APP_USER" --init-groups \
+  anvil-app-server \
   --app "$APP_DIR" \
   --data-dir /anvil-data \
   --port "$PORT" \
