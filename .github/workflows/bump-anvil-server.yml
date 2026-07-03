@@ -23,7 +23,9 @@ jobs:
             echo "changed=false" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Bump Dockerfile pin and commit
+      # Pushing the bumped Dockerfile is enough: it matches Railway's watchPatterns,
+      # so Railway rebuilds and redeploys automatically. No Railway token needed here.
+      - name: Bump Dockerfile pin and push
         if: steps.check.outputs.changed == 'true'
         run: |
           sed -i "s/^ARG ANVIL_SERVER_VERSION=.*/ARG ANVIL_SERVER_VERSION=${{ steps.check.outputs.latest }}/" Dockerfile
@@ -32,15 +34,3 @@ jobs:
           git add Dockerfile
           git commit -m "chore: bump anvil-app-server to ${{ steps.check.outputs.latest }}"
           git push
-
-      - name: Rebuild and deploy on Railway
-        if: steps.check.outputs.changed == 'true'
-        env:
-          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
-        run: |
-          npm install -g @railway/cli
-          railway up \
-            --project "${{ vars.RAILWAY_PROJECT_ID }}" \
-            --service "${{ vars.RAILWAY_SERVICE }}" \
-            --environment "${{ vars.RAILWAY_ENVIRONMENT }}" \
-            --ci --detach
