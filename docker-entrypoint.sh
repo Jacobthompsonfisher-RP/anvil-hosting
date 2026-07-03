@@ -55,6 +55,12 @@ for app_id in "${!DEP_REPOS[@]}"; do
   DEP_ARGS+=(--dep-id "$app_id=$pkg")
 done
 
+# Railway restarts containers with SIGKILL, so the bundled Postgres never shuts down
+# cleanly and leaves a stale postmaster.pid on the volume. On the next boot Anvil tries
+# to "shut down [the] orphaned DB" and crashes. A fresh container never has a live
+# Postgres, so removing the stale lock lets Postgres do a normal crash-recovery instead.
+rm -f /anvil-data/db/postmaster.pid
+
 # The bundled Postgres refuses to run as root, and Railway mounts the volume as root.
 # Give the unprivileged app user ownership of the app + data dirs, then drop privileges.
 chown -R "$APP_USER":"$APP_USER" /apps /anvil-data
