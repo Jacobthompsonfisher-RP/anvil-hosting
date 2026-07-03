@@ -1,7 +1,7 @@
 #!/bin/bash
 set -euo pipefail
 
-: "${ANVIL_APP_GIT_URL:?Set ANVIL_APP_GIT_URL to your Anvil app's git remote (from Clone with Git)}"
+: "${ANVIL_APP_GIT_URL:?Set ANVIL_APP_GIT_URL to your Anvil app git remote, from Clone with Git}"
 : "${ANVIL_SSH_KEY_B64:?Set ANVIL_SSH_KEY_B64 to the base64-encoded read-only SSH private key}"
 : "${ANVIL_APP_BRANCH:=}"
 : "${PORT:=3030}"
